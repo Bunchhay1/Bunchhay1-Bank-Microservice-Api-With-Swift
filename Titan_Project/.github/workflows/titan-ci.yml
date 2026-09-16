@@ -1,0 +1,109 @@
+name: Titan Core Banking CI/CD
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    # 🐳 Service Containers (Mock Infrastructure)
+    services:
+      # 🐘 Postgres
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: mysecretpassword
+          POSTGRES_DB: titandb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      # ⚡ Redis
+      redis:
+        image: redis:alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      # 1. 📥 Get the Code
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 2. ☕ Setup Java 21
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      # 3. 🛠️ Fix Permissions (Linux/Mac issue)
+      - name: Grant Execute Permission for Gradlew
+        run: chmod +x gradlew
+
+      # 4. 🧪 Run Tests (Integration Tests need DB & Redis)
+      - name: Run Tests
+        run: ./gradlew test
+        env:
+          # 🔌 Connect to Service Containers via localhost
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/titandb
+          SPRING_DATASOURCE_USERNAME: postgres
+          SPRING_DATASOURCE_PASSWORD: mysecretpassword
+          SPRING_DATA_REDIS_HOST: localhost
+          SPRING_DATA_REDIS_PORT: 6379
+          # 🔑 Inject Secrets (For Testing only)
+          JWT_SECRET: MySuperSecretKeyForTitanCoreBanking2026
+          AI_HOST: localhost
+          AI_PORT: 50051
+
+      # 5. 🏗️ Build Application (Skip Tests to save time)
+      - name: Build with Gradle
+        run: ./gradlew build -x test
+
+      # 6. 🔍 GraphQL Schema Registry Check (Task 10)
+      # Fails the PR if any field used by clients is removed or renamed.
+      # Compares current schema against the last registered baseline.
+      - name: Check GraphQL Schema for Breaking Changes
+        run: |
+          # Install graphql-inspector CLI
+          npm install -g @graphql-inspector/cli 2>/dev/null || true
+
+          # Collect all subgraph schemas
+          SCHEMAS=(
+            "titan-core-banking/src/main/resources/graphql/schema.graphqls"
+            "titan-promotions-service/src/main/resources/graphql/schema.graphqls"
+            "titan-spring-gateway/src/main/resources/graphql/schema.graphqls"
+          )
+
+          for SCHEMA in "${SCHEMAS[@]}"; do
+            SERVICE=$(echo $SCHEMA | cut -d'/' -f1)
+            BASELINE=".kiro/schema-registry/${SERVICE}.graphqls"
+
+            if [ -f "$BASELINE" ]; then
+              echo "🔍 Checking $SERVICE for breaking changes..."
+              npx graphql-inspector diff "$BASELINE" "$SCHEMA" --rule suppressRemovalOfDeprecatedField
+              if [ $? -ne 0 ]; then
+                echo "❌ BREAKING CHANGE detected in $SERVICE schema. PR blocked."
+                exit 1
+              fi
+              echo "✅ $SERVICE schema is safe."
+            else
+              echo "⚠️  No baseline found for $SERVICE — registering current schema."
+              mkdir -p .kiro/schema-registry
+              cp "$SCHEMA" "$BASELINE"
+            fi
+          done

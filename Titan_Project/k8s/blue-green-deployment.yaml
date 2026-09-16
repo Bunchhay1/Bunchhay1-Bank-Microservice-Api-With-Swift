@@ -1,0 +1,112 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: titan-core-blue
+  namespace: titan-banking
+  labels:
+    app: titan-core
+    version: blue
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: titan-core
+      version: blue
+  template:
+    metadata:
+      labels:
+        app: titan-core
+        version: blue
+    spec:
+      containers:
+      - name: titan-core
+        image: titan-core-banking:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: "prod,otel"
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          successThreshold: 3
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: titan-core-green
+  namespace: titan-banking
+  labels:
+    app: titan-core
+    version: green
+spec:
+  replicas: 0  # Initially scaled to 0
+  selector:
+    matchLabels:
+      app: titan-core
+      version: green
+  template:
+    metadata:
+      labels:
+        app: titan-core
+        version: green
+    spec:
+      containers:
+      - name: titan-core
+        image: titan-core-banking:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: "prod,otel"
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          successThreshold: 3
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: titan-core-service
+  namespace: titan-banking
+spec:
+  selector:
+    app: titan-core
+    version: blue  # Initially points to blue
+  ports:
+  - protocol: TCP
+    port: 8080
+    targetPort: 8080
+  type: ClusterIP

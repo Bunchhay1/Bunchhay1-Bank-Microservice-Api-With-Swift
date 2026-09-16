@@ -1,0 +1,77 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: titan-notifications
+  namespace: titan-banking
+  labels:
+    app: titan-notifications
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8084
+    targetPort: 8084
+    name: http
+  selector:
+    app: titan-notifications
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: titan-notifications
+  namespace: titan-banking
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: titan-notifications
+  template:
+    metadata:
+      labels:
+        app: titan-notifications
+    spec:
+      containers:
+      - name: titan-notifications
+        image: titan-notifications:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8084
+          name: http
+        env:
+        - name: SPRING_KAFKA_BOOTSTRAPSERVERS
+          value: "kafka:29093"
+        - name: SPRING_KAFKA_PROPERTIES_SECURITY_PROTOCOL
+          value: "SSL"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        volumeMounts:
+        - name: kafka-ssl
+          mountPath: /app/secrets
+          readOnly: true
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8084
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8084
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+      volumes:
+      - name: kafka-ssl
+        secret:
+          secretName: kafka-client-ssl-secrets
+          items:
+          - key: notifications.keystore.jks
+            path: notifications.keystore.jks
+          - key: kafka.client.truststore.jks
+            path: kafka.client.truststore.jks

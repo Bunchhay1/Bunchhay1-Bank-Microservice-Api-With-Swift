@@ -1,0 +1,4 @@
+# SECURITY DIRECTIVE FOR KIRO AGENT
+1. READ-ONLY PREFERENCE: You are restricted from autonomously modifying or deleting any directories in this root project.
+2. EXPLICIT CONSENT: If a task requires deleting a file or folder, you MUST stop and ask the user for explicit permission before executing the RM command.
+3. EXTREME CAUTION: Never execute destructive commands (`rm -rf`) autonomously within the microservices ecosystem

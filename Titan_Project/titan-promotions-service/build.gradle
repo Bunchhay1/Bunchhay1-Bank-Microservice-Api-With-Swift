@@ -1,0 +1,123 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.2.3'
+    id 'io.spring.dependency-management' version '1.1.4'
+    id 'org.flywaydb.flyway' version '10.8.1'
+    id 'com.google.protobuf' version '0.9.4'
+}
+
+group = 'com.titan'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    sourceCompatibility = '21'
+    targetCompatibility = '21'
+}
+
+// Disable plain JAR generation
+tasks.named('jar') {
+    enabled = false
+}
+
+// Protobuf configuration
+protobuf {
+    protoc {
+        artifact = 'com.google.protobuf:protoc:3.25.1'
+    }
+    plugins {
+        grpc {
+            artifact = 'io.grpc:protoc-gen-grpc-java:1.60.0'
+        }
+    }
+    generateProtoTasks {
+        all()*.plugins {
+            grpc {}
+        }
+    }
+}
+
+sourceSets {
+    main {
+        java {
+            srcDirs 'build/generated/source/proto/main/grpc'
+            srcDirs 'build/generated/source/proto/main/java'
+        }
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Spring Kafka (replaces event-consumer-lib)
+    implementation 'org.springframework.kafka:spring-kafka:3.1.2'
+    
+    // Spring Boot
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor:3.2.3'
+    implementation 'org.springframework.boot:spring-boot-starter-webflux'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    
+    // Redis for caching and idempotency
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+    implementation 'org.redisson:redisson-spring-boot-starter:3.27.2'
+    
+    // Neo4j (Task 1: Referral Trees)
+    implementation 'org.springframework.boot:spring-boot-starter-data-neo4j'
+    
+    // Spring Statemachine (Task 2: Quest System)
+    implementation 'org.springframework.statemachine:spring-statemachine-core:4.0.0'
+    implementation 'org.springframework.statemachine:spring-statemachine-data-common:4.0.0'
+    implementation 'org.springframework.statemachine:spring-statemachine-data-redis:4.0.0'
+    
+    // GraphQL + WebSocket (Task 4: Live Leaderboards)
+    implementation 'org.springframework.boot:spring-boot-starter-graphql'
+    implementation 'org.springframework.boot:spring-boot-starter-websocket'
+    
+    // javax.annotation compatibility for gRPC generated code on Java 21
+    implementation 'javax.annotation:javax.annotation-api:1.3.2'
+
+    // gRPC (Task 3, 6: Escrow & AI Integration)
+    implementation 'net.devh:grpc-spring-boot-starter:3.1.0.RELEASE'
+    implementation 'io.grpc:grpc-netty-shaded:1.60.0'
+    implementation 'io.grpc:grpc-protobuf:1.60.0'
+    implementation 'io.grpc:grpc-stub:1.60.0'
+    implementation 'com.google.protobuf:protobuf-java:3.25.1'
+    
+    // Debezium CDC (Task 9: Iceberg Export)
+    implementation 'io.debezium:debezium-embedded:2.5.0.Final'
+    implementation 'io.debezium:debezium-connector-postgres:2.5.0.Final'
+    
+    // Phase 5: Kafka Streams for CEP
+    implementation 'org.apache.kafka:kafka-streams:3.6.1'
+    
+    // Phase 5: PostGIS for geo-spatial
+    implementation 'org.hibernate:hibernate-spatial:6.4.4.Final'
+    implementation 'net.postgis:postgis-jdbc:2023.1.0'
+    
+    // Database
+    runtimeOnly 'org.postgresql:postgresql'
+    implementation 'org.flywaydb:flyway-core:10.8.1'
+    implementation 'org.flywaydb:flyway-database-postgresql:10.8.1'
+    
+    // Lombok
+    compileOnly 'org.projectlombok:lombok:1.18.36'
+    annotationProcessor 'org.projectlombok:lombok:1.18.36'
+    
+    // Micrometer for metrics
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+    
+    // Resilience4j for circuit breaker
+    implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.2.0'
+    implementation 'io.github.resilience4j:resilience4j-circuitbreaker:2.2.0'
+    
+    // Testing
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.kafka:spring-kafka-test'
+    testImplementation 'org.springframework.graphql:spring-graphql-test'
+    testImplementation 'org.springframework.security:spring-security-test'
+}
+

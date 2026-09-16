@@ -1,0 +1,79 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: titan-gateway
+  namespace: titan-banking
+  labels:
+    app: titan-gateway
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8000
+    targetPort: 8000
+    name: http
+  selector:
+    app: titan-gateway
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: titan-gateway
+  namespace: titan-banking
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: titan-gateway
+  template:
+    metadata:
+      labels:
+        app: titan-gateway
+    spec:
+      containers:
+      - name: titan-gateway
+        image: titan-gateway:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8000
+          name: http
+        env:
+        - name: PORT
+          value: "8000"
+        - name: TARGET_CORE_URL
+          value: "http://titan-core:8080"
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: titan-secrets
+              key: JWT_SECRET
+        - name: JWT_ISSUER
+          valueFrom:
+            configMapKeyRef:
+              name: titan-config
+              key: JWT_ISSUER
+        - name: JWT_AUDIENCE
+          valueFrom:
+            configMapKeyRef:
+              name: titan-config
+              key: JWT_AUDIENCE
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 40
+          periodSeconds: 30
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5

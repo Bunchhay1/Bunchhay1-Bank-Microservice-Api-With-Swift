@@ -1,0 +1,92 @@
+# Titan Supergraph Schema
+# Single entry point for all mobile/web clients.
+# Fields are stitched from core-banking and promotions subgraphs.
+
+type Query {
+    # From core-banking subgraph
+    user(id: ID!): User
+    account(id: ID!): Account
+    recentTransactions(accountId: ID!, limit: Int): [Transaction!]!
+
+    # From promotions subgraph (cached at gateway layer)
+    activeCampaigns: [Campaign!]!
+    leaderboard(campaignId: ID!, limit: Int): [LeaderboardEntry!]!
+}
+
+type Subscription {
+    # Live push via WebSocket — no polling needed
+    transactionCompleted(accountId: ID!): TransactionEvent!
+    leaderboardUpdates(campaignId: ID!): LeaderboardEntry!
+}
+
+# Federated: stitched from core-banking + promotions
+type User {
+    id: ID!
+    firstName: String!
+    lastName: String!
+    maskedAccountNumber: String
+    totalLedgerBalance: String @adminOnly
+    accounts: [Account!]!
+    # Resolved from promotions subgraph
+    activeRewards: [PromotionAggregate!]!
+}
+
+type Account {
+    id: ID!
+    accountNumber: String!
+    accountType: String!
+    currency: String!
+    balance: String @adminOnly
+    status: String!
+}
+
+type Transaction {
+    id: ID!
+    transactionReference: String!
+    transactionType: String!
+    amount: String!
+    currency: String!
+    status: String!
+    timestamp: String!
+    note: String
+}
+
+type TransactionEvent {
+    transactionId: String!
+    amount: String!
+    currency: String!
+    type: String!
+    status: String!
+    sourceAccountNumber: String!
+    targetAccountNumber: String!
+    timestamp: String!
+}
+
+type PromotionAggregate {
+    accountId: ID!
+    userName: String!
+    region: String!
+    promotionType: String!
+    rewardAmount: String!
+    spent: Boolean!
+}
+
+type Campaign {
+    id: ID!
+    name: String!
+    description: String!
+    startDate: String!
+    endDate: String!
+    active: Boolean!
+}
+
+type LeaderboardEntry {
+    campaignId: ID!
+    accountId: ID!
+    rank: Int!
+    totalSpent: String!
+    rewardEarned: String!
+}
+
+# Field-level RBAC directive — enforced in SupergraphRbacInstrumentation
+directive @adminOnly on FIELD_DEFINITION

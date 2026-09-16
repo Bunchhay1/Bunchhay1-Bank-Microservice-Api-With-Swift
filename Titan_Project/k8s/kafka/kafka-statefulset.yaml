@@ -1,0 +1,151 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: titan-banking
+  labels:
+    app: kafka
+spec:
+  ports:
+  - port: 9092
+    name: plaintext
+  - port: 9093
+    name: ssl
+  - port: 29092
+    name: internal-plaintext
+  - port: 29093
+    name: internal-ssl
+  - port: 9101
+    name: jmx
+  clusterIP: None
+  selector:
+    app: kafka
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+  namespace: titan-banking
+spec:
+  serviceName: kafka
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+    spec:
+      containers:
+      - name: kafka
+        image: confluentinc/cp-kafka:7.5.0
+        ports:
+        - containerPort: 9092
+          name: plaintext
+        - containerPort: 9093
+          name: ssl
+        - containerPort: 29092
+          name: internal-plain
+        - containerPort: 29093
+          name: internal-ssl
+        - containerPort: 9101
+          name: jmx
+        env:
+        - name: KAFKA_BROKER_ID
+          value: "1"
+        - name: KAFKA_ZOOKEEPER_CONNECT
+          value: "zookeeper:2181"
+        - name: KAFKA_ADVERTISED_LISTENERS
+          value: "PLAINTEXT://kafka:29092,SSL://kafka:29093,PLAINTEXT_HOST://localhost:9092,SSL_HOST://localhost:9093"
+        - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+          value: "PLAINTEXT:PLAINTEXT,SSL:SSL,PLAINTEXT_HOST:PLAINTEXT,SSL_HOST:SSL"
+        - name: KAFKA_INTER_BROKER_LISTENER_NAME
+          value: "SSL"
+        - name: KAFKA_SSL_KEYSTORE_FILENAME
+          value: "kafka.server.keystore.jks"
+        - name: KAFKA_SSL_KEYSTORE_CREDENTIALS
+          value: "kafka_keystore_credentials"
+        - name: KAFKA_SSL_KEY_CREDENTIALS
+          value: "kafka_key_credentials"
+        - name: KAFKA_SSL_TRUSTSTORE_FILENAME
+          value: "kafka.server.truststore.jks"
+        - name: KAFKA_SSL_TRUSTSTORE_CREDENTIALS
+          value: "kafka_truststore_credentials"
+        - name: KAFKA_SSL_CLIENT_AUTH
+          value: "required"
+        - name: KAFKA_SSL_ENDPOINT_IDENTIFICATION_ALGORITHM
+          value: ""
+        - name: KAFKA_SSL_ENABLED_PROTOCOLS
+          value: "TLSv1.3,TLSv1.2"
+        - name: KAFKA_SSL_PROTOCOL
+          value: "TLSv1.3"
+        - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+          value: "1"
+        - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+          value: "1"
+        - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+          value: "1"
+        - name: KAFKA_LOG_RETENTION_HOURS
+          value: "168"
+        - name: KAFKA_LOG_RETENTION_BYTES
+          value: "1073741824"
+        - name: KAFKA_LOG_SEGMENT_BYTES
+          value: "536870912"
+        - name: KAFKA_LOG_SEGMENT_MS
+          value: "86400000"
+        - name: KAFKA_NUM_NETWORK_THREADS
+          value: "3"
+        - name: KAFKA_NUM_IO_THREADS
+          value: "8"
+        - name: KAFKA_SOCKET_SEND_BUFFER_BYTES
+          value: "102400"
+        - name: KAFKA_SOCKET_RECEIVE_BUFFER_BYTES
+          value: "102400"
+        - name: KAFKA_SOCKET_REQUEST_MAX_BYTES
+          value: "104857600"
+        - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+          value: "false"
+        - name: KAFKA_DELETE_TOPIC_ENABLE
+          value: "true"
+        - name: KAFKA_HEAP_OPTS
+          value: "-Xms512m -Xmx1g -XX:+UseG1GC -XX:MaxGCPauseMillis=20 -XX:InitiatingHeapOccupancyPercent=35"
+        - name: KAFKA_JMX_PORT
+          value: "9101"
+        - name: KAFKA_JMX_HOSTNAME
+          value: "localhost"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        volumeMounts:
+        - name: kafka-data
+          mountPath: /var/lib/kafka/data
+        - name: kafka-ssl
+          mountPath: /etc/kafka/secrets
+          readOnly: true
+        livenessProbe:
+          tcpSocket:
+            port: 9092
+          initialDelaySeconds: 20
+          periodSeconds: 10
+        readinessProbe:
+          tcpSocket:
+            port: 9092
+          initialDelaySeconds: 10
+          periodSeconds: 5
+      volumes:
+      - name: kafka-ssl
+        secret:
+          secretName: kafka-ssl-secrets
+  volumeClaimTemplates:
+  - metadata:
+      name: kafka-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 5Gi

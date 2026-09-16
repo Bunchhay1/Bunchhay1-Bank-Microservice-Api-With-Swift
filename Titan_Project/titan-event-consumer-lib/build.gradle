@@ -1,0 +1,70 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+}
+
+// ── Identity ──────────────────────────────────────────────────────────────
+group   = 'com.titan'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+// ── Repositories ──────────────────────────────────────────────────────────
+repositories {
+    mavenCentral()
+}
+
+// ── Dependencies ──────────────────────────────────────────────────────────
+dependencies {
+    // Spring Kafka
+    api 'org.springframework.kafka:spring-kafka:3.1.2'
+
+    // Spring Boot (no web, no autoconfigure — this is a plain library)
+    api 'org.springframework.boot:spring-boot-starter:3.2.3'
+
+    // Jackson
+    api 'com.fasterxml.jackson.core:jackson-databind:2.16.1'
+    api 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.16.1'
+
+    // Logging
+    api 'org.slf4j:slf4j-api:2.0.12'
+
+    // Lombok
+    compileOnly 'org.projectlombok:lombok:1.18.36'
+    annotationProcessor 'org.projectlombok:lombok:1.18.36'
+
+    // Test
+    testImplementation 'org.springframework.boot:spring-boot-starter-test:3.2.3'
+    testImplementation 'org.springframework.kafka:spring-kafka-test:3.1.2'
+}
+
+// ── Maven Publish — produces the plain library jar ────────────────────────
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            groupId    = 'com.titan'
+            artifactId = 'titan-event-consumer-lib'
+            version    = '0.0.1-SNAPSHOT'
+            from components.java
+        }
+    }
+}
+
+// ── Compiler args (needed for Lombok on JDK 21) ───────────────────────────
+tasks.withType(JavaCompile).configureEach {
+    options.fork = true
+    options.compilerArgs += [
+        '--add-opens=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED',
+        '--add-opens=jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED',
+        '--add-opens=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED',
+        '--add-opens=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED',
+        '--add-opens=jdk.compiler/com.sun.tools.javac.model=ALL-UNNAMED',
+        '--add-opens=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED',
+        '--add-opens=jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED',
+        '--add-opens=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED',
+        '--add-opens=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED'
+    ]
+}

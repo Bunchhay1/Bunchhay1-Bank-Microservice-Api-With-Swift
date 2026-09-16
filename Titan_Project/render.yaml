@@ -1,0 +1,572 @@
+# =============================================================================
+# render.yaml — Titan Banking Platform — Master Deployment File
+#
+# DEPLOY ORDER (Render handles this automatically via dependencies):
+#   1. Databases (titan-core-db, titan-notifications-db, titan-promotions-db)
+#   2. AI/Private Services (titan-ai-service)
+#   3. Core Services (titan-core-banking, notifications, promotions, cbs-adapter, darkpool)
+#   4. Gateways (titan-spring-gateway, titan-gateway-go, titan-gateway-rust)
+#
+# BEFORE DEPLOYING:
+#   - Push this entire repo to GitHub
+#   - Connect GitHub repo to Render → "New Blueprint"
+#   - Fill in all sync:false INPUT BOX variables in Render Dashboard
+#   - Set up Confluent Cloud (free Kafka) and copy bootstrap server URL
+#   - Set up Upstash Redis (free) and copy the Redis URL
+#
+# FREE TIER NOTES:
+#   - Free web services spin down after 15min inactivity (cold start ~30-60s)
+#   - Free Postgres: 1GB storage, 1 instance
+#   - Java services tuned to -Xmx400m to fit 512MB RAM limit
+#   - Kafka & Redis require external free-tier providers (see INPUT BOX variables)
+# =============================================================================
+
+databases:
+  # ── Core Banking DB ──────────────────────────────────────────────────────
+  - name: titan-core-db
+    plan: free
+    databaseName: titandb
+    user: titanuser
+
+  # ── Notifications DB ─────────────────────────────────────────────────────
+  - name: titan-notifications-db
+    plan: free
+    databaseName: notificationsdb
+    user: notificationsuser
+
+  # ── Promotions DB ────────────────────────────────────────────────────────
+  - name: titan-promotions-db
+    plan: free
+    databaseName: promotionsdb
+    user: promotionsuser
+
+services:
+
+  # ===========================================================================
+  # TIER 1 — AI / Private Services (no public URL, internal network only)
+  # ===========================================================================
+
+  # ── AI Risk Engine (Python gRPC) ─────────────────────────────────────────
+  - type: pserv
+    name: titan-ai-service
+    runtime: docker
+    dockerfilePath: ./titan-ai-service/Dockerfile
+    dockerContext: ./titan-ai-service
+    plan: free
+    envVars:
+      - key: GRPC_PORT
+        value: "50051"
+      - key: MAX_WORKERS
+        value: "10"
+      - key: LOG_LEVEL
+        value: "INFO"
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: RISK_LOW_MAX_AMOUNT
+        value: "1000"
+      - key: RISK_MEDIUM_MAX_AMOUNT
+        value: "10000"
+      - key: RISK_HIGH_MAX_AMOUNT
+        value: "100000"
+      - key: RISK_SCORE_LOW
+        value: "10"
+      - key: RISK_SCORE_MEDIUM
+        value: "50"
+      - key: RISK_SCORE_HIGH
+        value: "85"
+      - key: RISK_SCORE_BLOCKED
+        value: "100"
+
+  # ===========================================================================
+  # TIER 2 — Core Business Services
+  # ===========================================================================
+
+  # ── Core Banking (Java/Spring Boot) ──────────────────────────────────────
+  - type: web
+    name: titan-core-banking
+    runtime: docker
+    dockerfilePath: ./titan-core-banking/Dockerfile
+    dockerContext: ./titan-core-banking
+    plan: free
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: "render"
+      - key: JAVA_OPTS
+        value: "-Xmx400m -Xms200m"
+
+      # Database — auto-injected from Render Postgres
+      - key: DB_HOST
+        fromDatabase:
+          name: titan-core-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: titan-core-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: titan-core-db
+          property: database
+      - key: DB_USERNAME
+        fromDatabase:
+          name: titan-core-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: titan-core-db
+          property: password
+      - key: SPRING_DATASOURCE_URL
+        fromDatabase:
+          name: titan-core-db
+          property: connectionString
+
+      # JWT — auto-generated
+      - key: APP_JWT_SECRET
+        generateValue: true
+
+      # AI Service — Render internal DNS (titan-ai-service.onrender.com internal)
+      - key: AI_HOST
+        value: "titan-ai-service"
+      - key: AI_PORT
+        value: "50051"
+      - key: AI_DEADLINE_MS
+        value: "3000"
+      - key: AI_LOCAL_BLOCK_LIMIT
+        value: "100000"
+
+      # Kafka — 📦 INPUT BOX: Confluent Cloud settings
+      - key: KAFKA_BOOTSTRAP_SERVERS
+        sync: false
+        value: "REPLACE_WITH_CONFLUENT_CLOUD_BOOTSTRAP_SERVER"
+      - key: KAFKA_ENABLED
+        value: "true"
+      - key: KAFKA_SECURITY_PROTOCOL
+        value: "SASL_SSL"
+      - key: KAFKA_SASL_MECHANISM
+        value: "PLAIN"
+      - key: KAFKA_SASL_USERNAME
+        sync: false
+        value: "REPLACE_WITH_CONFLUENT_API_KEY"
+      - key: KAFKA_SASL_PASSWORD
+        sync: false
+        value: "REPLACE_WITH_CONFLUENT_API_SECRET"
+
+      # Redis — 📦 INPUT BOX: paste Upstash Redis URL
+      - key: REDIS_HOST
+        sync: false
+        value: "REPLACE_WITH_UPSTASH_REDIS_HOST"
+      - key: REDIS_PORT
+        value: "6379"
+
+      # Apple APNS Push Notifications — 📦 INPUT BOX
+      - key: APNS_KEY_ID
+        sync: false
+        value: ""
+      - key: APNS_TEAM_ID
+        sync: false
+        value: ""
+      - key: APNS_BUNDLE_ID
+        value: "com.titan.banking"
+      - key: APNS_SANDBOX
+        value: "true"
+      - key: APNS_PRIVATE_KEY
+        sync: false
+        value: ""
+
+      # QR Payments
+      - key: QR_DEFAULT_TTL_MINUTES
+        value: "15"
+      - key: QR_MAX_AMOUNT
+        value: "1000000.00"
+
+      # CBDC Bridge (optional)
+      - key: CBDC_NODE_URL
+        value: "http://localhost:8545"
+      - key: CBDC_CONTRACT_ADDRESS
+        value: "0x0000000000000000000000000000000000000001"
+      - key: CBDC_TOKEN_SYMBOL
+        value: "eKHR"
+
+      # Observability — disabled on free tier
+      - key: ZIPKIN_ENDPOINT
+        value: ""
+      - key: TRACING_SAMPLE_RATE
+        value: "0.0"
+
+      # Dead Man's Switch
+      - key: DMS_ENABLED
+        value: "true"
+      - key: DMS_EXECUTIVE_PUBLIC_KEY
+        sync: false
+        value: ""
+
+      # FX Data
+      - key: FX_DATA_URL
+        value: "https://api.frankfurter.app"
+
+  # ── Notifications Service (Java/Spring Boot) ──────────────────────────────
+  - type: web
+    name: titan-notifications-service
+    runtime: docker
+    dockerfilePath: ./titan-notifications-service/Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: "render"
+      - key: JAVA_OPTS
+        value: "-Xmx400m -Xms200m"
+
+      - key: DB_HOST
+        fromDatabase:
+          name: titan-notifications-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: titan-notifications-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: titan-notifications-db
+          property: database
+      - key: DB_USERNAME
+        fromDatabase:
+          name: titan-notifications-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: titan-notifications-db
+          property: password
+      - key: SPRING_DATASOURCE_URL
+        fromDatabase:
+          name: titan-notifications-db
+          property: connectionString
+
+      - key: KAFKA_BOOTSTRAP_SERVERS
+        sync: false
+        value: "REPLACE_WITH_CONFLUENT_CLOUD_BOOTSTRAP_SERVER"
+      - key: KAFKA_ENABLED
+        value: "true"
+      - key: KAFKA_SECURITY_PROTOCOL
+        value: "SASL_SSL"
+      - key: KAFKA_SASL_MECHANISM
+        value: "PLAIN"
+      - key: KAFKA_SASL_USERNAME
+        sync: false
+        value: "REPLACE_WITH_CONFLUENT_API_KEY"
+      - key: KAFKA_SASL_PASSWORD
+        sync: false
+        value: "REPLACE_WITH_CONFLUENT_API_SECRET"
+
+      - key: REDIS_HOST
+        sync: false
+        value: "REPLACE_WITH_UPSTASH_REDIS_HOST"
+      - key: REDIS_PORT
+        value: "6379"
+
+      # SendGrid — 📦 INPUT BOX: https://sendgrid.com (100 emails/day free)
+      - key: SENDGRID_API_KEY
+        sync: false
+        value: "REPLACE_WITH_SENDGRID_API_KEY"
+
+      # Twilio SMS — 📦 INPUT BOX (optional): https://twilio.com
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+        value: ""
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+        value: ""
+      - key: TWILIO_FROM_NUMBER
+        sync: false
+        value: ""
+
+      - key: NOTIFICATION_EMAIL_ENABLED
+        value: "true"
+      - key: NOTIFICATION_TELEGRAM_ENABLED
+        value: "false"
+      - key: NOTIFICATION_HIGH_VALUE_THRESHOLD
+        value: "500.00"
+      - key: VAULT_ENABLED
+        value: "false"
+
+  # ── Promotions Service (Java/Spring Boot) ────────────────────────────────
+  - type: web
+    name: titan-promotions-service
+    runtime: docker
+    dockerfilePath: ./titan-promotions-service/Dockerfile
+    dockerContext: ./titan-promotions-service
+    plan: free
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: "render"
+      - key: JAVA_OPTS
+        value: "-Xmx400m -Xms200m"
+
+      - key: DB_HOST
+        fromDatabase:
+          name: titan-promotions-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: titan-promotions-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: titan-promotions-db
+          property: database
+      - key: DB_USERNAME
+        fromDatabase:
+          name: titan-promotions-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: titan-promotions-db
+          property: password
+      - key: SPRING_DATASOURCE_URL
+        fromDatabase:
+          name: titan-promotions-db
+          property: connectionString
+
+      - key: KAFKA_BOOTSTRAP_SERVERS
+        sync: false
+        value: "REPLACE_WITH_CONFLUENT_CLOUD_BOOTSTRAP_SERVER"
+      - key: KAFKA_ENABLED
+        value: "true"
+      - key: KAFKA_SECURITY_PROTOCOL
+        value: "SASL_SSL"
+      - key: KAFKA_SASL_MECHANISM
+        value: "PLAIN"
+      - key: KAFKA_SASL_USERNAME
+        sync: false
+        value: "REPLACE_WITH_CONFLUENT_API_KEY"
+      - key: KAFKA_SASL_PASSWORD
+        sync: false
+        value: "REPLACE_WITH_CONFLUENT_API_SECRET"
+
+      - key: REDIS_HOST
+        sync: false
+        value: "REPLACE_WITH_UPSTASH_REDIS_HOST"
+
+  # ── CBS Adapter (Java/Spring Boot) ───────────────────────────────────────
+  - type: web
+    name: titan-cbs-adapter
+    runtime: docker
+    dockerfilePath: ./titan-cbs-adapter/Dockerfile
+    dockerContext: ./titan-cbs-adapter
+    plan: free
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: "render"
+      - key: JAVA_OPTS
+        value: "-Xmx400m -Xms200m"
+      # Render internal URL for core banking
+      - key: CORE_BANKING_URL
+        value: "https://titan-core-banking.onrender.com"
+      - key: KAFKA_BOOTSTRAP_SERVERS
+        sync: false
+        value: "REPLACE_WITH_CONFLUENT_CLOUD_BOOTSTRAP_SERVER"
+      - key: KAFKA_ENABLED
+        value: "true"
+      - key: KAFKA_SECURITY_PROTOCOL
+        value: "SASL_SSL"
+      - key: KAFKA_SASL_MECHANISM
+        value: "PLAIN"
+      - key: KAFKA_SASL_USERNAME
+        sync: false
+        value: "REPLACE_WITH_CONFLUENT_API_KEY"
+      - key: KAFKA_SASL_PASSWORD
+        sync: false
+        value: "REPLACE_WITH_CONFLUENT_API_SECRET"
+
+  # ── Darkpool Service (Java/Maven) ─────────────────────────────────────────
+  - type: web
+    name: titan-darkpool-service
+    runtime: docker
+    dockerfilePath: ./titan-darkpool-service/Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: "render"
+      - key: JAVA_OPTS
+        value: "-Xmx400m -Xms200m"
+      - key: DB_HOST
+        fromDatabase:
+          name: titan-core-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: titan-core-db
+          property: port
+      - key: SPRING_DATASOURCE_URL
+        fromDatabase:
+          name: titan-core-db
+          property: connectionString
+      - key: DB_USERNAME
+        fromDatabase:
+          name: titan-core-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: titan-core-db
+          property: password
+      - key: KAFKA_BOOTSTRAP_SERVERS
+        sync: false
+        value: "REPLACE_WITH_CONFLUENT_CLOUD_BOOTSTRAP_SERVER"
+      - key: KAFKA_ENABLED
+        value: "true"
+      - key: KAFKA_SECURITY_PROTOCOL
+        value: "SASL_SSL"
+      - key: KAFKA_SASL_MECHANISM
+        value: "PLAIN"
+      - key: KAFKA_SASL_USERNAME
+        sync: false
+        value: "REPLACE_WITH_CONFLUENT_API_KEY"
+      - key: KAFKA_SASL_PASSWORD
+        sync: false
+        value: "REPLACE_WITH_CONFLUENT_API_SECRET"
+
+  # ── Legacy CBS Simulator (Java/Gradle) ───────────────────────────────────
+  - type: web
+    name: legacy-cbs-simulator
+    runtime: docker
+    dockerfilePath: ./legacy-cbs-simulator/Dockerfile
+    dockerContext: ./legacy-cbs-simulator
+    plan: free
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: "render"
+      - key: JAVA_OPTS
+        value: "-Xmx400m -Xms200m"
+      - key: CORE_BANKING_URL
+        value: "https://titan-core-banking.onrender.com"
+
+  # ===========================================================================
+  # TIER 3 — ML / Crypto / Privacy Services
+  # ===========================================================================
+
+  # ── Edge AI (Python — static file server + model) ────────────────────────
+  - type: web
+    name: titan-edge-ai
+    runtime: docker
+    dockerfilePath: ./titan-edge-ai/Dockerfile
+    dockerContext: ./titan-edge-ai
+    plan: free
+    envVars:
+      - key: PORT
+        value: "8001"
+      - key: PYTHONUNBUFFERED
+        value: "1"
+
+  # ── QKD Service (Python/Flask) ───────────────────────────────────────────
+  - type: web
+    name: titan-qkd-service
+    runtime: docker
+    dockerfilePath: ./titan-qkd-service/Dockerfile
+    dockerContext: ./titan-qkd-service
+    plan: free
+    envVars:
+      - key: PORT
+        value: "8100"
+      - key: PYTHONUNBUFFERED
+        value: "1"
+
+  # ── Federated Learning Server (Python/Flask) ─────────────────────────────
+  - type: web
+    name: titan-federated-learning
+    runtime: docker
+    dockerfilePath: ./titan-federated-learning/Dockerfile
+    dockerContext: ./titan-federated-learning
+    plan: free
+    envVars:
+      - key: PORT
+        value: "8098"
+      - key: PYTHONUNBUFFERED
+        value: "1"
+
+  # ── MPC Service ───────────────────────────────────────────────────────────
+  # NOTE: titan-mpc-service directory is empty — add Dockerfile before deploying
+  - type: web
+    name: titan-mpc-service
+    runtime: docker
+    dockerfilePath: ./titan-mpc-service/Dockerfile
+    dockerContext: ./titan-mpc-service
+    plan: free
+    envVars:
+      - key: PORT
+        value: "8099"
+
+  # ── FHE Service ───────────────────────────────────────────────────────────
+  # NOTE: titan-fhe-service directory is empty — add Dockerfile before deploying
+  - type: web
+    name: titan-fhe-service
+    runtime: docker
+    dockerfilePath: ./titan-fhe-service/Dockerfile
+    dockerContext: ./titan-fhe-service
+    plan: free
+    envVars:
+      - key: PORT
+        value: "8095"
+
+  # ===========================================================================
+  # TIER 4 — API Gateways (deploy last)
+  # ===========================================================================
+
+  # ── Spring Cloud Gateway (Java) ───────────────────────────────────────────
+  - type: web
+    name: titan-spring-gateway
+    runtime: docker
+    dockerfilePath: ./titan-spring-gateway/Dockerfile
+    dockerContext: ./titan-spring-gateway
+    plan: free
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: "render"
+      - key: JAVA_OPTS
+        value: "-Xmx400m -Xms200m"
+      - key: CORE_BANKING_URL
+        value: "https://titan-core-banking.onrender.com"
+      - key: NOTIFICATIONS_URL
+        value: "https://titan-notifications-service.onrender.com"
+      - key: PROMOTIONS_URL
+        value: "https://titan-promotions-service.onrender.com"
+      - key: AI_SERVICE_URL
+        value: "https://titan-edge-ai.onrender.com"
+      - key: CBS_ADAPTER_URL
+        value: "https://titan-cbs-adapter.onrender.com"
+
+  # ── Go Gateway ────────────────────────────────────────────────────────────
+  - type: web
+    name: titan-gateway-go
+    runtime: docker
+    dockerfilePath: ./titan-gateway-go/Dockerfile
+    dockerContext: ./titan-gateway-go
+    plan: free
+    envVars:
+      - key: PORT
+        value: "8088"
+      - key: CORE_BANKING_URL
+        value: "https://titan-core-banking.onrender.com"
+      - key: NOTIFICATIONS_URL
+        value: "https://titan-notifications-service.onrender.com"
+      - key: PROMOTIONS_URL
+        value: "https://titan-promotions-service.onrender.com"
+
+  # ── Rust Gateway ──────────────────────────────────────────────────────────
+  # NOTE: folder name has a space ("titan gateway ") — rename before deploying!
+  - type: web
+    name: titan-gateway-rust
+    runtime: docker
+    dockerfilePath: ./titan-gateway-rust/Dockerfile
+    dockerContext: ./titan-gateway-rust
+    plan: free
+    envVars:
+      - key: PORT
+        value: "8087"

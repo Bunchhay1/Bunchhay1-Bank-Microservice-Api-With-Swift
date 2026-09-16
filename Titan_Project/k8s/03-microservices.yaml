@@ -1,0 +1,372 @@
+# Titan Banking - Microservices Layer
+# Core Banking + Gateway + AI + Promotions + Notifications + Zipkin
+
+---
+# Zipkin Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: zipkin
+  namespace: titan-banking
+spec:
+  type: NodePort
+  ports:
+    - port: 9411
+      targetPort: 9411
+      nodePort: 30411
+  selector:
+    app: zipkin
+
+---
+# Zipkin Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zipkin
+  namespace: titan-banking
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zipkin
+  template:
+    metadata:
+      labels:
+        app: zipkin
+    spec:
+      containers:
+      - name: zipkin
+        image: openzipkin/zipkin
+        ports:
+        - containerPort: 9411
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+
+---
+# AI Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: titan-ai
+  namespace: titan-banking
+spec:
+  ports:
+    - port: 50051
+      targetPort: 50051
+  selector:
+    app: titan-ai
+
+---
+# AI Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: titan-ai
+  namespace: titan-banking
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: titan-ai
+  template:
+    metadata:
+      labels:
+        app: titan-ai
+    spec:
+      containers:
+      - name: titan-ai
+        image: titan-ai:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 50051
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+
+---
+# Core Banking Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: titan-core
+  namespace: titan-banking
+spec:
+  type: NodePort
+  ports:
+    - port: 8080
+      targetPort: 8080
+      nodePort: 30080
+  selector:
+    app: titan-core
+
+---
+# Core Banking Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: titan-core
+  namespace: titan-banking
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: titan-core
+  template:
+    metadata:
+      labels:
+        app: titan-core
+    spec:
+      enableServiceLinks: false
+      containers:
+      - name: titan-core
+        image: titan-core:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8080
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: "prod"
+        - name: DB_HOST
+          value: "titan-db-service"
+        - name: DB_PORT
+          value: "5432"
+        - name: DB_NAME
+          value: "titandb"
+        - name: DB_USERNAME
+          value: "postgres"
+        - name: DB_PASSWORD
+          value: "TitanDB$ecure2026_X9z!Lp"
+        - name: REDIS_HOST
+          value: "redis"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: AI_HOST
+          value: "titan-ai"
+        - name: AI_PORT
+          value: "50051"
+        - name: ZIPKIN_ENDPOINT
+          value: "http://zipkin:9411/api/v2/spans"
+        - name: SPRING_KAFKA_BOOTSTRAPSERVERS
+          value: "kafka:9092"
+        - name: JAVA_OPTS
+          value: "-Xmx512m -Xms256m"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          initialDelaySeconds: 90
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 5
+
+---
+# Gateway Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: titan-gateway
+  namespace: titan-banking
+spec:
+  type: NodePort
+  ports:
+    - port: 8000
+      targetPort: 8000
+      nodePort: 30000
+  selector:
+    app: titan-gateway
+
+---
+# Gateway Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: titan-gateway
+  namespace: titan-banking
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: titan-gateway
+  template:
+    metadata:
+      labels:
+        app: titan-gateway
+    spec:
+      containers:
+      - name: titan-gateway
+        image: titan-gateway:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8000
+        env:
+        - name: PORT
+          value: "8000"
+        - name: TARGET_CORE_URL
+          value: "http://titan-core:8080"
+        - name: JWT_SECRET
+          value: "5367566B59703373367639792F423F4528482B4D6251655468576D5A71347437"
+        - name: JWT_ISSUER
+          value: "titan-banking"
+        - name: JWT_AUDIENCE
+          value: "titan-api"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+
+---
+# Promotions Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: titan-promotions
+  namespace: titan-banking
+spec:
+  type: NodePort
+  ports:
+    - port: 8083
+      targetPort: 8083
+      nodePort: 30083
+  selector:
+    app: titan-promotions
+
+---
+# Promotions Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: titan-promotions
+  namespace: titan-banking
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: titan-promotions
+  template:
+    metadata:
+      labels:
+        app: titan-promotions
+    spec:
+      containers:
+      - name: titan-promotions
+        image: titan-promotions:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8083
+        env:
+        - name: SPRING_KAFKA_BOOTSTRAPSERVERS
+          value: "kafka:9092"
+        - name: SPRING_KAFKA_SECURITY_PROTOCOL
+          value: "PLAINTEXT"
+        - name: DATABASE_URL
+          value: "jdbc:postgresql://titan-db-service:5432/titan_promotions"
+        - name: DATABASE_USERNAME
+          value: "postgres"
+        - name: DATABASE_PASSWORD
+          value: "TitanDB$ecure2026_X9z!Lp"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8083
+          initialDelaySeconds: 90
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8083
+          initialDelaySeconds: 60
+          periodSeconds: 5
+
+---
+# Notifications Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: titan-notifications
+  namespace: titan-banking
+spec:
+  type: NodePort
+  ports:
+    - port: 8084
+      targetPort: 8084
+      nodePort: 30084
+  selector:
+    app: titan-notifications
+
+---
+# Notifications Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: titan-notifications
+  namespace: titan-banking
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: titan-notifications
+  template:
+    metadata:
+      labels:
+        app: titan-notifications
+    spec:
+      containers:
+      - name: titan-notifications
+        image: titan-notifications:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8084
+        env:
+        - name: SPRING_KAFKA_BOOTSTRAPSERVERS
+          value: "kafka:9092"
+        - name: SPRING_KAFKA_SECURITY_PROTOCOL
+          value: "PLAINTEXT"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8084
+          initialDelaySeconds: 90
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8084
+          initialDelaySeconds: 60
+          periodSeconds: 5

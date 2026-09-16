@@ -1,0 +1,26 @@
+// trace_tcp.bt
+// Trace TCP connection establishment using Linux kernel eBPF tracepoint.
+// 
+// Requires bpftrace on Linux/Colima.
+
+BEGIN
+{
+  printf("Tracing active TCP connections using eBPF... Press Ctrl-C to stop.\n");
+  printf("%-8s %-8s %-16s %-30s %-30s\n", "TIME", "PID", "COMM", "SOURCE", "DESTINATION");
+}
+
+tracepoint:sock:inet_sock_set_state
+{
+  // 1 = TCP_ESTABLISHED (connection successfully established)
+  if (args->newstate == 1) {
+    time("%H:%M:%S ");
+    printf("%-8d %-16s %s:%d -> %s:%d\n",
+      pid,
+      comm,
+      ntop(args->family, args->saddr),
+      args->sport,
+      ntop(args->family, args->daddr),
+      args->dport
+    );
+  }
+}

@@ -1,0 +1,6 @@
+rootProject.name = 'titan-project'
+
+include 'titan-event-consumer-lib'
+include 'titan-promotions-service'
+include 'titan-notifications-service'
+include 'titan-spring-gateway'

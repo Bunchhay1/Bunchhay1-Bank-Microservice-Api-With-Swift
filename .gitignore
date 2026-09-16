@@ -1,0 +1,53 @@
+# OS files
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+
+# Xcode / iOS
+xcuserdata/
+*.xcuserdatad
+*.xcuserstate
+project.xcworkspace/xcuserdata/
+build/
+DerivedData/
+*.moved-aside
+*.xccheckout
+*.xcscmblueprint
+
+# Java / Maven / Gradle
+**/target/
+**/.gradle/
+*.jar
+*.war
+*.ear
+*.class
+
+# Python
+**/.venv/
+**/venv/
+**/ENV/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# Go binaries
+**/gateway
+
+# Logs
+logs/
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# Environment & credentials
+.env
+.env.local
+.env.*.local
+secrets/kafka_*_credentials

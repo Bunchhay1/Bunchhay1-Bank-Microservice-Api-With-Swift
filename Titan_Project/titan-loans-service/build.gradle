@@ -1,0 +1,74 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.2.3'
+    id 'io.spring.dependency-management' version '1.1.4'
+}
+
+group = 'com.titan'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+tasks.named('jar') {
+    enabled = false
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Core & Web
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    // Security & JWT
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'io.jsonwebtoken:jjwt-api:0.11.5'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.11.5'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.11.5'
+
+    // Database
+    runtimeOnly 'org.postgresql:postgresql'
+    implementation 'org.flywaydb:flyway-core'
+
+    // Kafka — for publishing disbursement / repayment events to core-banking
+    implementation 'org.springframework.kafka:spring-kafka'
+
+    // Redis — idempotency cache
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+
+    // Observability
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.3.0'
+
+    // Lombok
+    compileOnly 'org.projectlombok:lombok:1.18.36'
+    annotationProcessor 'org.projectlombok:lombok:1.18.36'
+    testCompileOnly 'org.projectlombok:lombok:1.18.36'
+    testAnnotationProcessor 'org.projectlombok:lombok:1.18.36'
+
+    // Tests
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.security:spring-security-test'
+}
+
+tasks.withType(JavaCompile) {
+    options.fork = true
+    options.forkOptions.jvmArgs += [
+            '--add-opens=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED',
+            '--add-opens=jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED',
+            '--add-opens=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED',
+            '--add-opens=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED',
+            '--add-opens=jdk.compiler/com.sun.tools.javac.model=ALL-UNNAMED',
+            '--add-opens=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED',
+            '--add-opens=jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED',
+            '--add-opens=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED',
+            '--add-opens=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED'
+    ]
+}

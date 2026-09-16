@@ -1,0 +1,322 @@
+# ============================================================
+# Titan Full Stack — docker-compose-online.yml
+#
+# Services & Ports:
+#   titan-core-banking          → 8080
+#   titan-notifications-service → 8084
+#   titan-promotions-service    → 8083
+#   titan-cbs-adapter           → 8085
+#   titan-darkpool-service      → 8090
+#   titan-spring-gateway        → 8000
+#   titan-ai-service (gRPC)     → 50051
+#   titan-edge-ai               → 8001
+#   titan-mpc-service           → 8099
+#   titan-fhe-service           → 8095
+#   titan-qkd-service           → 8100
+#   titan-federated-learning    → 8098
+#   titan-gateway (Rust)        → 8088
+#
+# Start:  docker compose -f docker-compose-online.yml up -d --build
+# Stop:   docker compose -f docker-compose-online.yml down
+# ============================================================
+
+services:
+
+  # ─── Infrastructure ───────────────────────────────────────
+
+  postgres:
+    image: postgis/postgis:15-3.4
+    container_name: titan_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "TitanDB$$ecure2026_X9z!Lp"
+      POSTGRES_DB: titandb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-promotiondb.sql:/docker-entrypoint-initdb.d/init-promotiondb.sql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      retries: 5
+
+  redis:
+    image: redis:7.2
+    container_name: titan-redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 5
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: titan-kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,INTERNAL://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,INTERNAL://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qg"
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qg"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      retries: 5
+
+  neo4j:
+    image: neo4j:5.18
+    container_name: titan-neo4j
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      NEO4J_AUTH: neo4j/password
+    volumes:
+      - neo4j_data:/data
+    restart: unless-stopped
+
+  zipkin:
+    image: openzipkin/zipkin:3
+    container_name: titan-zipkin
+    ports:
+      - "9411:9411"
+    restart: unless-stopped
+
+  # ─── Core Banking ─────────────────────────────────────────
+
+  titan-core-banking:
+    build:
+      context: ./titan-core-banking
+    container_name: titan-core-banking
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/titandb
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: "TitanDB$$ecure2026_X9z!Lp"
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_ZIPKIN_BASE_URL: http://zipkin:9411
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+
+  # ─── Notifications Service ────────────────────────────────
+
+  titan-notifications-service:
+    build:
+      context: .
+      dockerfile: titan-notifications-service/Dockerfile
+    container_name: titan-notifications-service
+    ports:
+      - "8084:8084"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/titandb
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: "TitanDB$$ecure2026_X9z!Lp"
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_ZIPKIN_BASE_URL: http://zipkin:9411
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8084/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+
+  # ─── Promotions Service ───────────────────────────────────
+
+  titan-promotions-service:
+    build:
+      context: ./titan-promotions-service
+    container_name: titan-promotions-service
+    ports:
+      - "8083:8083"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/titandb
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: "TitanDB$$ecure2026_X9z!Lp"
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_ZIPKIN_BASE_URL: http://zipkin:9411
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8083/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+
+  # ─── CBS Adapter ──────────────────────────────────────────
+
+  titan-cbs-adapter:
+    build:
+      context: ./titan-cbs-adapter
+    container_name: titan-cbs-adapter
+    ports:
+      - "8085:8085"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/titandb
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: "TitanDB$$ecure2026_X9z!Lp"
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      CORE_BANKING_URL: http://titan-core-banking:8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+      titan-core-banking:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ─── Darkpool Service ─────────────────────────────────────
+
+  titan-darkpool-service:
+    build:
+      context: .
+      dockerfile: titan-darkpool-service/Dockerfile
+    container_name: titan-darkpool-service
+    ports:
+      - "8090:8090"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/titandb
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: "TitanDB$$ecure2026_X9z!Lp"
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ─── Spring Gateway ───────────────────────────────────────
+
+  titan-spring-gateway:
+    build:
+      context: ./titan-spring-gateway
+    container_name: titan-spring-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      CORE_BANKING_URL: http://titan-core-banking:8080
+      NOTIFICATIONS_URL: http://titan-notifications-service:8084
+      PROMOTIONS_URL: http://titan-promotions-service:8083
+      AI_SERVICE_URL: http://titan-edge-ai:8001
+      SPRING_ZIPKIN_BASE_URL: http://zipkin:9411
+    depends_on:
+      - titan-core-banking
+      - titan-notifications-service
+      - titan-promotions-service
+    restart: unless-stopped
+
+  # ─── AI / ML Services ─────────────────────────────────────
+
+  titan-ai-service:
+    build:
+      context: ./titan-ai-service
+    container_name: titan-ai-service
+    ports:
+      - "50051:50051"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/bin/grpc_health_probe", "-addr=:50051"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  titan-edge-ai:
+    build:
+      context: ./titan-edge-ai
+    container_name: titan-edge-ai
+    ports:
+      - "8001:8000"
+    restart: unless-stopped
+
+  titan-federated-learning:
+    build:
+      context: ./titan-federated-learning
+    container_name: titan-federated-learning
+    ports:
+      - "8098:9876"
+    restart: unless-stopped
+
+  # ─── Crypto / Privacy Services ────────────────────────────
+
+  titan-mpc-service:
+    build:
+      context: ./titan-mpc-service
+    container_name: titan-mpc-service
+    ports:
+      - "8099:8763"
+    restart: unless-stopped
+
+  titan-fhe-service:
+    build:
+      context: ./titan-fhe-service
+    container_name: titan-fhe-service
+    ports:
+      - "8095:9020"
+    restart: unless-stopped
+
+  titan-qkd-service:
+    build:
+      context: ./titan-qkd-service
+    container_name: titan-qkd-service
+    ports:
+      - "8100:9912"
+    restart: unless-stopped
+
+  # ─── Rust Gateway ─────────────────────────────────────────
+
+  titan-gateway:
+    build:
+      context: ./titan-gateway-go
+    container_name: titan-gateway
+    ports:
+      - "8088:8088"
+    depends_on:
+      - titan-core-banking
+      - titan-notifications-service
+      - titan-promotions-service
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  neo4j_data:

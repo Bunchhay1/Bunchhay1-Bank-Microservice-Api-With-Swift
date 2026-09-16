@@ -1,0 +1,72 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.2.3'
+    id 'io.spring.dependency-management' version '1.1.4'
+}
+
+group = 'com.titan'
+version = '1.0.0'
+description = 'Titan Dark Pool Service'
+sourceCompatibility = '21'
+
+// Java 21 LTS Configuration
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+// Disable plain JAR generation (only keep the boot JAR)
+tasks.named('jar') {
+    enabled = false
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // 1. Core & Web
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+
+    // 6. Observability (optional but good to have)
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+    // ✅ 11. TOOLS - LOMBOK (Fixed for Java 21+)
+    compileOnly 'org.projectlombok:lombok:1.18.36'
+    annotationProcessor 'org.projectlombok:lombok:1.18.36'
+    testCompileOnly 'org.projectlombok:lombok:1.18.36'
+    testAnnotationProcessor 'org.projectlombok:lombok:1.18.36'
+
+    // Tests
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+}
+
+sourceSets {
+    main {
+        java {
+            srcDir 'src'
+        }
+        resources {
+            srcDir 'src'
+        }
+    }
+}
+
+// ✅ 12. COMPILER CONFIG (Lombok-compatible, Java 21)
+// NOTE: --add-opens is a JVM flag, NOT a javac flag.
+//       Passing it via compilerArgs causes "has no effect at compile time" warning
+//       and can cause the compiler to fail with 1 error. Use forkOptions.jvmArgs instead.
+tasks.withType(JavaCompile) {
+    options.fork = true
+    options.forkOptions.jvmArgs += [
+            '--add-opens=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED',
+            '--add-opens=jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED',
+            '--add-opens=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED',
+            '--add-opens=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED',
+            '--add-opens=jdk.compiler/com.sun.tools.javac.model=ALL-UNNAMED',
+            '--add-opens=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED',
+            '--add-opens=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED',
+            '--add-opens=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED'
+    ]
+}

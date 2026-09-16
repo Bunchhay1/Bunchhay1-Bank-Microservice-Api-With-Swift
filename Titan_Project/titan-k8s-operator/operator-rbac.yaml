@@ -1,0 +1,62 @@
+---
+# Task 3: Titan Self-Healing Operator RBAC + Deployment
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: titan-operator
+  namespace: titan-banking
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: titan-operator-role
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "services", "nodes"]
+    verbs: ["get", "list", "watch", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: titan-operator-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: titan-operator-role
+subjects:
+  - kind: ServiceAccount
+    name: titan-operator
+    namespace: titan-banking
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: titan-k8s-operator
+  namespace: titan-banking
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: titan-k8s-operator
+  template:
+    metadata:
+      labels:
+        app: titan-k8s-operator
+    spec:
+      serviceAccountName: titan-operator
+      containers:
+        - name: operator
+          image: titan/titan-k8s-operator:latest
+          env:
+            - name: ENV
+              value: "prod"
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"

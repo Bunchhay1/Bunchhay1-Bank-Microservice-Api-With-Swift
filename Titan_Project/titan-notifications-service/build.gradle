@@ -1,0 +1,109 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.2.3'
+    id 'io.spring.dependency-management' version '1.1.4'
+    id 'com.google.protobuf' version '0.9.4'
+}
+
+group = 'com.titan'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    sourceCompatibility = '21'
+}
+
+tasks.named('jar') { enabled = false }
+tasks.named('bootJar') { duplicatesStrategy = DuplicatesStrategy.EXCLUDE }
+
+repositories {
+    mavenCentral()
+    mavenLocal()
+}
+
+ext {
+    springCloudVersion = '2023.0.0'
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}"
+        mavenBom "software.amazon.awssdk:bom:2.25.0"
+    }
+}
+
+dependencies {
+    // Local lib (built first in Docker)
+    implementation 'com.titan:titan-event-consumer-lib:0.0.1-SNAPSHOT'
+
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+    implementation 'org.springframework.boot:spring-boot-starter-freemarker'
+    implementation 'org.springframework.boot:spring-boot-starter-websocket'
+    implementation 'org.springframework.boot:spring-boot-starter-aop'
+    implementation 'org.springframework.boot:spring-boot-starter-mail'
+    implementation 'org.springframework.boot:spring-boot-starter-batch'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'org.springframework.retry:spring-retry'
+    implementation 'org.springframework.kafka:spring-kafka'
+    implementation 'org.springframework.cloud:spring-cloud-starter-vault-config'
+
+    // gRPC + Protobuf
+    implementation 'net.devh:grpc-client-spring-boot-starter:3.1.0.RELEASE'
+    implementation 'io.grpc:grpc-stub:1.62.2'
+    implementation 'io.grpc:grpc-protobuf:1.62.2'
+    implementation 'javax.annotation:javax.annotation-api:1.3.2'
+
+    // Resilience4j
+    implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.2.0'
+    implementation 'io.github.resilience4j:resilience4j-circuitbreaker:2.2.0'
+
+    // S/MIME
+    implementation 'org.bouncycastle:bcmail-jdk18on:1.77'
+    implementation 'org.bouncycastle:bcpkix-jdk18on:1.77'
+    implementation 'com.sun.mail:javax.mail:1.6.2'
+
+    // Parquet + Hadoop
+    implementation('org.apache.parquet:parquet-avro:1.13.1')
+    implementation('org.apache.hadoop:hadoop-common:3.3.6') {
+        exclude group: 'org.slf4j',        module: 'slf4j-reload4j'
+        exclude group: 'ch.qos.reload4j',  module: 'reload4j'
+        exclude group: 'log4j',            module: 'log4j'
+    }
+
+    // AWS S3
+    implementation 'software.amazon.awssdk:s3'
+
+    // Database
+    runtimeOnly 'org.postgresql:postgresql'
+    implementation 'org.flywaydb:flyway-core'
+
+    // Lombok
+    compileOnly 'org.projectlombok:lombok:1.18.36'
+    annotationProcessor 'org.projectlombok:lombok:1.18.36'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.kafka:spring-kafka-test'
+    testImplementation 'com.h2database:h2'
+}
+
+// Protobuf for engagement.proto
+protobuf {
+    protoc { artifact = 'com.google.protobuf:protoc:3.25.1' }
+    plugins {
+        grpc { artifact = 'io.grpc:protoc-gen-grpc-java:1.62.2' }
+    }
+    generateProtoTasks {
+        all()*.plugins { grpc {} }
+    }
+}
+
+sourceSets {
+    main {
+        java {
+            srcDir 'build/generated/source/proto/main/grpc'
+            srcDir 'build/generated/source/proto/main/java'
+        }
+    }
+}

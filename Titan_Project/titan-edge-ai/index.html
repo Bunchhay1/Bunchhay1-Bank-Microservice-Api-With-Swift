@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Titan Edge AI - Client-Side Fraud Detection</title>
+    <style>
+        body { font-family: monospace; max-width: 800px; margin: 50px auto; padding: 20px; background: #f5f5f5; }
+        .container { border: 2px solid #333; padding: 20px; border-radius: 10px; background: white; }
+        h1 { color: #333; }
+        input { width: 100%; padding: 10px; margin: 10px 0; font-size: 16px; border: 1px solid #ccc; border-radius: 5px; }
+        button { width: 100%; padding: 15px; font-size: 18px; background: #4CAF50; color: white; border: none; cursor: pointer; border-radius: 5px; margin-top: 10px; }
+        button:hover { background: #45a049; }
+        .result { margin-top: 20px; padding: 15px; border-radius: 5px; font-size: 18px; font-weight: bold; }
+        .legit { background: #d4edda; color: #155724; border: 2px solid #c3e6cb; }
+        .fraud { background: #f8d7da; color: #721c24; border: 2px solid #f5c6cb; }
+        .info { color: #666; font-size: 14px; margin-top: 10px; padding: 10px; background: #e7f3ff; border-radius: 5px; }
+        .stats { margin-top: 20px; padding: 10px; background: #f8f9fa; border-radius: 5px; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>&#x1F6E1;&#xFE0F; Titan Edge AI - Fraud Detection</h1>
+        <p><strong>Client-Side AI:</strong> Neural network runs entirely in your browser. Zero server calls.</p>
+        
+        <label>Transaction Amount ($):</label>
+        <input type="number" id="amount" value="100" placeholder="e.g., 100">
+        
+        <label>Typing Speed (ms between keystrokes):</label>
+        <input type="number" id="typing" value="200" placeholder="e.g., 200">
+        
+        <label>Device Trust Score (0.0 - 1.0):</label>
+        <input type="number" id="trust" value="0.9" step="0.1" min="0" max="1" placeholder="e.g., 0.9">
+        
+        <button onclick="detectFraud()">&#x1F50D; Analyze Transaction (Local AI)</button>
+        
+        <div id="result"></div>
+        <div class="info" id="info">&#x23F3; Loading AI model...</div>
+        <div class="stats" id="stats"></div>
+    </div>
+
+    <script>
+        let modelWeights = null;
+        let scalerParams = null;
+
+        // ReLU activation
+        function relu(x) {
+            return Math.max(0, x);
+        }
+
+        // Sigmoid activation
+        function sigmoid(x) {
+            return 1 / (1 + Math.exp(-x));
+        }
+
+        // Matrix multiplication
+        function matmul(input, weights, bias) {
+            const output = [];
+            for (let i = 0; i < weights[0].length; i++) {
+                let sum = bias[i];
+                for (let j = 0; j < input.length; j++) {
+                    sum += input[j] * weights[j][i];
+                }
+                output.push(sum);
+            }
+            return output;
+        }
+
+        // Normalize input
+        function normalize(value, mean, std) {
+            return (value - mean) / std;
+        }
+
+        // Forward pass through neural network
+        function predict(input) {
+            // Layer 1: Input -> Hidden (8 neurons, ReLU)
+            let layer1 = matmul(input, modelWeights.layer1_weights, modelWeights.layer1_bias);
+            layer1 = layer1.map(relu);
+            
+            // Layer 2: Hidden -> Hidden (4 neurons, ReLU)
+            let layer2 = matmul(layer1, modelWeights.layer2_weights, modelWeights.layer2_bias);
+            layer2 = layer2.map(relu);
+            
+            // Layer 3: Hidden -> Output (1 neuron, Sigmoid)
+            let output = matmul(layer2, modelWeights.layer3_weights, modelWeights.layer3_bias);
+            return sigmoid(output[0]);
+        }
+
+        // Load model weights
+        async function loadModel() {
+            try {
+                const weightsResponse = await fetch('model_weights.json');
+                modelWeights = await weightsResponse.json();
+                
+                const scalerResponse = await fetch('scaler_params.json');
+                scalerParams = await scalerResponse.json();
+                
+                document.getElementById('info').innerHTML = '&#x2705; AI Model loaded (3-layer neural network running locally)';
+                document.getElementById('stats').innerHTML = `
+                    <strong>Model Architecture:</strong><br>
+                    Input Layer: 3 features<br>
+                    Hidden Layer 1: 8 neurons (ReLU)<br>
+                    Hidden Layer 2: 4 neurons (ReLU)<br>
+                    Output Layer: 1 neuron (Sigmoid)<br>
+                    <strong>Total Parameters:</strong> ${(3*8 + 8 + 8*4 + 4 + 4*1 + 1)} weights
+                `;
+            } catch (error) {
+                document.getElementById('info').innerHTML = '&#x274C; Error loading model: ' + error.message;
+            }
+        }
+
+        function detectFraud() {
+            if (!modelWeights || !scalerParams) {
+                alert('Model still loading...');
+                return;
+            }
+
+            const amount = parseFloat(document.getElementById('amount').value);
+            const typing = parseFloat(document.getElementById('typing').value);
+            const trust = parseFloat(document.getElementById('trust').value);
+
+            // Validate inputs
+            if (isNaN(amount) || isNaN(typing) || isNaN(trust)) {
+                alert('Please enter valid numbers for all fields');
+                return;
+            }
+
+            // Normalize inputs using saved scaler parameters
+            const normalized = [
+                normalize(amount, scalerParams.mean[0], scalerParams.std[0]),
+                normalize(typing, scalerParams.mean[1], scalerParams.std[1]),
+                normalize(trust, scalerParams.mean[2], scalerParams.std[2])
+            ];
+
+            // Run inference locally
+            const startTime = performance.now();
+            const riskScore = predict(normalized);
+            const inferenceTime = (performance.now() - startTime).toFixed(3);
+
+            // Validate risk score
+            if (isNaN(riskScore)) {
+                alert('Error: Invalid prediction result');
+                return;
+            }
+
+            // Display result
+            const resultDiv = document.getElementById('result');
+            const isFraud = riskScore > 0.5;
+            const confidence = Math.abs(riskScore - 0.5) * 200;
+            
+            resultDiv.className = 'result ' + (isFraud ? 'fraud' : 'legit');
+            resultDiv.innerHTML = `
+                <strong>${isFraud ? '&#x1F6A8; FRAUD DETECTED' : '&#x2705; TRANSACTION APPROVED'}</strong><br>
+                Risk Score: ${(riskScore * 100).toFixed(1)}%<br>
+                Confidence: ${confidence.toFixed(1)}%<br>
+                Inference Time: ${inferenceTime}ms
+            `;
+
+            document.getElementById('info').innerHTML = `
+                &#x2139;&#xFE0F; This analysis ran entirely in your browser using pure JavaScript (WebAssembly-ready). 
+                No data was sent to any server. Neural network inference completed in ${inferenceTime}ms.
+            `;
+        }
+
+        // Load model on page load
+        loadModel();
+    </script>
+</body>
+</html>

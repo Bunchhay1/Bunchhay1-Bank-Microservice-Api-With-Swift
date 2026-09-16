@@ -1,0 +1,58 @@
+server:
+  port: 2020
+
+spring:
+  application:
+    name: titan-supergraph-gateway
+  main:
+    web-application-type: reactive
+
+  # Task 1: GraphQL Supergraph endpoint
+  graphql:
+    path: /graphql
+    websocket:
+      path: /graphql/websocket
+    schema:
+      locations: classpath:graphql/
+    graphiql:
+      enabled: true   # GraphiQL UI at /graphiql
+
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: 6379
+
+  cloud:
+    gateway:
+      routes:
+        - id: core-banking-rest
+          uri: http://titan-core-banking:8080
+          predicates:
+            - Path=/api/v1/accounts/**, /api/v1/transactions/**
+          filters:
+            - JwtAuth
+        - id: auth-service
+          uri: http://titan-core-banking:8080
+          predicates:
+            - Path=/api/v1/auth/**
+
+# Task 9: OpenTelemetry distributed tracing
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: http://zipkin:9411/api/v2/spans
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+
+jwt:
+  secret: ${JWT_SECRET:default-secret-key-change-in-production}
+
+logging:
+  level:
+    com.titan.gateway: DEBUG
+    org.springframework.graphql: DEBUG

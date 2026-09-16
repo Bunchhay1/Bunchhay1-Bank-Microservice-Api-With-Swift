@@ -1,0 +1,58 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.2.0'
+    id 'io.spring.dependency-management' version '1.1.4'
+}
+
+group = 'com.titan'
+version = '1.0.0'
+sourceCompatibility = '21'
+
+// Disable plain JAR — only the bootJar fat JAR should be produced
+// This prevents Docker COPY from failing when multiple *.jar files exist
+tasks.named('jar') {
+    enabled = false
+}
+
+repositories {
+    mavenCentral()
+}
+
+ext {
+    springCloudVersion = '2023.0.0'
+}
+
+dependencies {
+    // Gateway routing
+    implementation 'org.springframework.cloud:spring-cloud-starter-gateway'
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis-reactive'
+
+    // GraphQL Supergraph + WebSocket subscriptions
+    implementation 'org.springframework.boot:spring-boot-starter-graphql'
+    implementation 'org.springframework.boot:spring-boot-starter-websocket'
+    implementation 'org.springframework.boot:spring-boot-starter-webflux'
+
+    // Security + JWT
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.3'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.3'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.3'
+
+    // OpenTelemetry tracing
+    implementation 'io.micrometer:micrometer-tracing-bridge-brave'
+    implementation 'io.zipkin.reporter2:zipkin-reporter-brave'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+    // Lombok
+    compileOnly 'org.projectlombok:lombok:1.18.36'
+    annotationProcessor 'org.projectlombok:lombok:1.18.36'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.graphql:spring-graphql-test'
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}"
+    }
+}

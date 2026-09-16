@@ -1,0 +1,3 @@
+load-test-results.txt
+build/
+*.jar

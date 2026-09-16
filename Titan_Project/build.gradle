@@ -1,0 +1,35 @@
+// Root build file for Titan Kafka Event-Driven Architecture
+
+plugins {
+    id 'java'
+}
+
+allprojects {
+    group = 'com.titan'
+    version = '0.0.1-SNAPSHOT'
+    
+    repositories {
+        mavenCentral()
+    }
+}
+
+subprojects {
+    apply plugin: 'java'
+    
+    java {
+        sourceCompatibility = '21'
+        targetCompatibility = '21'
+    }
+}
+
+// Root project has no source - all code lives in submodules
+sourceSets {
+    main {
+        java { srcDirs = [] }
+        resources { srcDirs = [] }
+    }
+    test {
+        java { srcDirs = [] }
+        resources { srcDirs = [] }
+    }
+}
