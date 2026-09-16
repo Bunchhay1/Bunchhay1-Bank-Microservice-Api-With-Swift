@@ -1,34 +1,61 @@
-# Titan Banking Microservices Platform
+# Titan Banking Platform (Microservices API & Swift iOS)
 
-Titan Banking is a cloud-native microservices banking backend designed for high availability, event-driven ledger consistency, and real-time mobile integration.
+Titan Banking is a modern, cloud-native banking platform engineered for high-throughput transactional reliability, event-driven ledger consistency, and seamless native mobile banking experiences.
 
-This documentation focuses on the four core microservices powering the system:
-1. **Titan Gateway Service (`titan-gateway-go`)**
-2. **Titan Core Service (`titan-core-banking`)**
-3. **Titan Promotion Service (`titan-promotions-service`)**
-4. **Titan Notification Service (`titan-notifications-service`)**
+The repository bundles the **core microservices backend** with the **native Swift iOS application**:
+
+1. **Titan Gateway Service (`titan-gateway-go`)** — Reverse proxy, rate limiting, and unified entry point (:8088)
+2. **Titan Core Service (`titan-core-banking`)** — Transaction ledger, accounts, auth, and transfers (:8080)
+3. **Titan Promotion Service (`titan-promotions-service`)** — Real-time event-driven rewards and quests (:8083)
+4. **Titan Notification Service (`titan-notifications-service`)** — Omni-channel alerts, APNs push, SMS, and email (:8084)
+5. **Titan Banking iOS App (`Titan_Banking`)** — Native SwiftUI banking client for iPhone
 
 ---
 
-## 🏛️ Architecture Overview
+## 🏛️ System Architecture
 
 ```mermaid
 flowchart TD
-    Client["📱 iOS Client / Web Application"] -->|Port 8088| Gateway["🛡️ Titan Gateway Service (Go)"]
-    
-    Gateway -->|Auth / Accounts / Transactions| Core["🏦 Titan Core Banking (:8080)"]
-    Gateway -->|Promotions / Quests / Rewards| Promo["🎁 Titan Promotion Service (:8083)"]
-    Gateway -->|Alerts / Push / Preferences| Notif["🔔 Titan Notification Service (:8084)"]
+    subgraph Client ["📱 Native iOS Application"]
+        iOS["Titan Banking App (SwiftUI / MVVM)"]
+    end
 
-    Core -->|Event: banking.transactions.completed| Kafka["📨 Apache Kafka"]
-    Kafka -->|Consume Transaction Events| Promo
-    Kafka -->|Consume Notification Triggers| Notif
+    subgraph Edge ["🛡️ Edge & Gateway"]
+        Gateway["Titan Gateway Service (Go :8088)"]
+    end
 
-    Core --> DB_Core[("🐘 PostgreSQL: titandb")]
-    Promo --> DB_Promo[("🐘 PostgreSQL: promotiondb")]
-    Notif --> DB_Notif[("🐘 PostgreSQL: notificationdb")]
+    subgraph Microservices ["🏦 Core Microservices"]
+        Core["Titan Core Banking (:8080)"]
+        Promo["Titan Promotion Service (:8083)"]
+        Notif["Titan Notification Service (:8084)"]
+    end
 
-    Core -.-> Redis[("⚡ Redis: 6379")]
+    subgraph EventStream ["📨 Event Streaming"]
+        Kafka["Apache Kafka (:9092)"]
+    end
+
+    subgraph Persistence ["💾 Databases & Cache"]
+        DB_Core[("🐘 PostgreSQL: titandb")]
+        DB_Promo[("🐘 PostgreSQL: promotiondb")]
+        DB_Notif[("🐘 PostgreSQL: notificationdb")]
+        Redis[("⚡ Redis: 6379")]
+    end
+
+    iOS -->|HTTP / JSON via Port 8088| Gateway
+
+    Gateway -->|/api/v1/auth, /api/v1/accounts, /api/v1/transactions| Core
+    Gateway -->|/api/v1/promotions, /api/quests, /graphql| Promo
+    Gateway -->|/api/notify, /api/audit, /api/preferences| Notif
+
+    Core -->|Emit: banking.transactions.completed| Kafka
+    Kafka -->|Consume for Cashback & Quests| Promo
+    Kafka -->|Consume for In-App & Push Alerts| Notif
+
+    Core --> DB_Core
+    Promo --> DB_Promo
+    Notif --> DB_Notif
+
+    Core -.-> Redis
     Promo -.-> Redis
     Notif -.-> Redis
 ```
@@ -149,6 +176,45 @@ An enterprise notification dispatcher supporting omni-channel messaging across i
 
 ---
 
+## 5. 📱 Titan Banking iOS App (`Titan_Banking`)
+
+The mobile client is a native iOS application built with **SwiftUI** and **MVVM** architecture. It interacts exclusively with the backend via the **Titan Gateway (`localhost:8088`)**, ensuring end-to-end security and clean separation of concerns.
+
+* **Path**: `Titan_Banking__Dev_Connect_with_server_machineMAC/`
+* **Language & Framework**: Swift 5.9+, SwiftUI, Combine, Modern Concurrency (`async`/`await`)
+* **Target OS**: iOS 16.0+ / iOS 17.0+
+* **Networking**: Unified `APIClient` targeting `http://localhost:8088` (Gateway)
+
+### Key Mobile Features
+* **Authentication & Security**:
+  - Secure login, customer registration, and JWT token storage in Keychain.
+  - Biometric authentication (FaceID / TouchID) and optional PIN passcode lock.
+* **Dashboard & Account Ledger**:
+  - Dual-currency display (USD and KHR) with real-time balance eye-toggle.
+  - Interactive account carousel card selector.
+  - Quick action shortcuts (Transfer, QR Pay, Deposit, Withdraw).
+* **Transfers & Payments**:
+  - Peer-to-peer account transfers with live smart currency conversion.
+  - Scheduled and recurring transfers.
+  - International cross-border transfers.
+* **KHQR (Bakong) Payments**:
+  - Built-in camera QR scanner and photo library picker.
+  - Dynamic QR code generation (embedded amount and account details).
+  - One-tap instant payment settlement.
+* **Cardless ATM Cash Out**:
+  - Generate time-limited 6-digit ATM withdrawal OTP codes.
+  - Built-in ATM redemption simulator for testing withdrawals without a physical machine.
+* **Fixed Deposit & Wealth Management**:
+  - Interactive tenure selector (3, 6, 12 months) with real-time interest return calculator.
+  - Direct account opening and tracking.
+* **e-Statements**:
+  - Monthly financial account statement generation and PDF preview/download.
+* **Real-Time Notification Banner**:
+  - Global background polling showing floating in-app transaction banners within seconds of funds arrival.
+  - Notification history feed and delivery channel preferences (Push, SMS, Email).
+
+---
+
 ## ⚙️ Environment Variables Reference
 
 | Category | Environment Variable | Affected Services | Default / Example |
@@ -162,29 +228,35 @@ An enterprise notification dispatcher supporting omni-channel messaging across i
 | | `KAFKA_ENABLED` | Notif, Core | `true` (Docker) / `false` (Local fallback) |
 | **Redis** | `REDIS_HOST` | Core, Promo, Notif | `localhost` (Docker: `redis`) |
 | | `REDIS_PORT` | Core, Promo, Notif | `6379` |
-| **Security** | `JWT_SECRET` | Gateway, Core | Shared HMAC-256 256-bit secret string |
+| **Security** | `JWT_SECRET` | Gateway, Core, iOS | Shared HMAC-256 256-bit secret string |
 | **Services** | `NOTIFICATION_SERVICE_URL` | Core Banking | `http://localhost:8084` |
 | | `PROMOTION_SERVICE_URL` | Core Banking | `http://localhost:8083` |
 | | `CONFIG_PATH` | Gateway | `/app/config.yaml` |
 
 ---
 
-## 🚀 Running the Services with Docker Compose
+## 🚀 Quick Start Guide
 
-To start the infrastructure along with all four services:
+### 1. Start Backend Microservices with Docker
+From the project backend directory:
 
 ```bash
-# 1. Navigate to the project backend root
 cd Titan_Project
 
-# 2. Build and start containers in the background
+# Start infrastructure (PostgreSQL, Kafka, Redis) and core microservices
 docker compose up -d --build postgres redis kafka kafka-init titan-core-banking titan-promotions-service titan-notifications-service titan-gateway-go
 
-# 3. Verify container health
+# Verify all containers are healthy
 docker compose ps
-
-# 4. Stream service logs
-docker compose logs -f titan-core-banking titan-gateway-go
 ```
 
-Once running, clients can connect directly through the **Titan Gateway** on `http://localhost:8088`.
+The gateway is now listening on **`http://localhost:8088`**.
+
+### 2. Run the iOS Application
+1. Open Xcode:
+   ```bash
+   open Titan_Banking__Dev_Connect_with_server_machineMAC/Titan_Banking.xcodeproj
+   ```
+2. Select an iOS Simulator (e.g. **iPhone 15 Pro** or **iPhone 16 Pro**).
+3. Press **`Cmd + R`** to build and run.
+4. The app automatically connects to `http://localhost:8088` through the Go Gateway.
