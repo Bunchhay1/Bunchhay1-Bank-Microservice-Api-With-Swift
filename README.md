@@ -1,3 +1,5 @@
+
+
 # Titan Banking Platform (Microservices API & Swift iOS)
 
 Titan Banking is a modern, cloud-native banking platform engineered for high-throughput transactional reliability, event-driven ledger consistency, and seamless native mobile banking experiences.
@@ -212,6 +214,10 @@ The mobile client is a native iOS application built with **SwiftUI** and **MVVM*
 * **Real-Time Notification Banner**:
   - Global background polling showing floating in-app transaction banners within seconds of funds arrival.
   - Notification history feed and delivery channel preferences (Push, SMS, Email).
+
+
+
+https://www.youtube.com/watch?v=ZK7f0ASDNAI
 
 
 
