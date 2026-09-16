@@ -213,6 +213,8 @@ The mobile client is a native iOS application built with **SwiftUI** and **MVVM*
   - Global background polling showing floating in-app transaction banners within seconds of funds arrival.
   - Notification history feed and delivery channel preferences (Push, SMS, Email).
 
+
+
 ---
 
 ## ⚙️ Environment Variables Reference
